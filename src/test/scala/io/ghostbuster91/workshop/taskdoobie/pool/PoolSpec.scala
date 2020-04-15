@@ -1,12 +1,14 @@
 package io.ghostbuster91.workshop.taskdoobie.pool
 
 import cats.effect.Resource
+import io.ghostbuster91.workshop.taskdoobie.actor.PoolActor
 import io.ghostbuster91.workshop.taskdoobie.doobie.infra.PostgresDocker
 import monix.eval.Task
 import monix.execution.{Cancelable, Scheduler}
 import monix.reactive.Observable
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+
 import scala.concurrent.duration._
 
 class PoolSpec extends AnyFreeSpec with Matchers with PostgresDocker {
@@ -14,8 +16,9 @@ class PoolSpec extends AnyFreeSpec with Matchers with PostgresDocker {
     import monix.execution.Scheduler.Implicits.global
 
     val repository = new SqlRequestPoolRepository
-    val checkService = new CheckService(repository, xa, 100)
-    val updateService = new UpdateService(repository, xa)
+    val actor = new PoolActor(repository, xa, 100)
+    val checkService = new CheckService(actor)
+    val updateService = new UpdateService(actor)
     val generatorService = new GeneratorService(repository, xa, updateService)
     val userService = new UseService(repository, xa)
 
@@ -25,6 +28,7 @@ class PoolSpec extends AnyFreeSpec with Matchers with PostgresDocker {
         .generate(50 millis)
         .toResource(Scheduler.computation())
       _ <- userService.usingInterval(300 millis).toResource(Scheduler.global)
+      _ <- Resource.make(actor.run)(_.cancel)
     } yield ()).use(_ => Task.never).runSyncUnsafe()
   }
 
