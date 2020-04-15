@@ -21,6 +21,7 @@ class CheckService(repository: SqlRequestPoolRepository,
 
   def checkPool(): Task[Unit] = {
     (for {
+      _ <- repository.lockPoolTable()
       currentSize <- repository.getCurrentSize()
       inFlight <- repository.requestsInFlight()
       _ <- addIfNecessary(currentSize, inFlight, targetSize)
